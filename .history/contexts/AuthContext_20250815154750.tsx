@@ -13,21 +13,25 @@ interface AuthContextType {
   signUp: (
     email: string,
     password: string,
-    metadata?: { full_name?: string; fullName?: string; whatsapp?: string }
+    metadata?: { name?: string; whatsapp?: string; [k: string]: any }
   ) => Promise<{ error: { message: string } | null }>;
 
   login: (email: string, password: string) => Promise<{ error: { message: string } | null }>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ error: { message: string } | null }>;
   updateUserPlan: (plan: 'lifetime') => Promise<{ error: { message: string } | null }>;
+
+  // Novo: atualizar o user_metadata (nome, whatsapp, etc.)
+  updateProfile: (data: { name?: string; whatsapp?: string }) => Promise<{ error: { message: string } | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Base pública do app (dev: localhost, prod: Vercel)
-const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
-
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+// Se o seu App usa navegação baseada em estado (switch), deixe `navigate` como opcional:
+export const AuthProvider: React.FC<{ children: ReactNode; navigate?: (page: string) => void }> = ({
+  children,
+  navigate,
+}) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,15 +39,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [error, setError] = useState<{ message: string } | null>(null);
 
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
+      // Quando vem do link de reset, o Supabase cria uma sessão temporária de recuperação
+      if (event === 'PASSWORD_RECOVERY' && navigate) {
+        navigate('reset-password'); // sua tela/form de redefinição
+        return;
+      }
+
       setSession(s as Session);
       setUser(s?.user as User);
       setInitialLoading(false);
     });
+
     return () => subscription?.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const handleError = (err: { message: string } | null) => {
     setError(err);
@@ -51,50 +60,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { error: err };
   };
 
-  // ------------------- SIGN UP -------------------
+  // ---------- Auth Actions ----------
   const signUp = async (
     email: string,
     password: string,
-    metadata?: { full_name?: string; fullName?: string; whatsapp?: string }
+    metadata?: { name?: string; whatsapp?: string; [k: string]: any }
   ) => {
     setLoading(true);
-
-    // Supabase exibe "Display name" a partir de full_name
-    const full_name = (metadata?.full_name || metadata?.fullName || '').trim();
-    const whatsapp = (metadata?.whatsapp || '').trim();
-
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name, whatsapp }, // vai para auth.users.raw_user_meta_data
-        emailRedirectTo: `${APP_URL}/login`, // após confirmar e-mail
-        autoSignIn: false,
+        data: { ...(metadata || {}), is_validated: false },
+        emailRedirectTo: `${window.location.origin}/login`,
       },
     });
-
-    // Reflete imediatamente no painel (às vezes o meta demora a aparecer)
-    if (!error && data.user) {
-      await supabase.auth.updateUser({ data: { full_name, whatsapp } });
-    }
-
     setLoading(false);
     return handleError(error as any);
   };
 
-  // ------------------- LOGIN -------------------
   const login = async (email: string, password: string) => {
     setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
+
     if (error) return handleError(error as any);
 
     const isValidated = (data.user as any)?.user_metadata?.is_validated;
-    if (isValidated === false) {
+    if (!isValidated) {
       await supabase.auth.signOut();
       return handleError({ message: 'Conta não validada. Aguarde confirmação.' });
     }
-
     return { error: null };
   };
 
@@ -104,13 +100,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(false);
   };
 
-  // ------------------- RESET PASSWORD -------------------
   const requestPasswordReset = async (email: string) => {
     setLoading(true);
-    // Mande o usuário direto para a página de redefinição do seu domínio público
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${APP_URL}/reset-password`,
-    });
+    // redireciona de volta para o seu app; o listener acima manda para 'reset-password'
+    const redirectTo = `${window.location.origin}`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     setLoading(false);
     return handleError(error as any);
   };
@@ -120,6 +114,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { error } = await supabase.auth.updateUser({ data: { plan } });
     setLoading(false);
     return error ? handleError(error as any) : { error: null };
+  };
+
+  // ---------- NOVO: atualizar o user_metadata ----------
+  const updateProfile = async (data: { name?: string; whatsapp?: string }) => {
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ data });
+
+    // Atualiza o estado local do usuário para refletir as mudanças imediatamente
+    const refreshed = await supabase.auth.getUser();
+    if (refreshed.data.user) {
+      setUser(refreshed.data.user as unknown as User);
+    }
+
+    setLoading(false);
+    return handleError(error as any);
   };
 
   return (
@@ -135,6 +144,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         signOut,
         requestPasswordReset,
         updateUserPlan,
+        updateProfile, // exposto para o app usar
       }}
     >
       {children}
@@ -143,7 +153,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export const useAuth = (): AuthContextType => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  return context;
 };

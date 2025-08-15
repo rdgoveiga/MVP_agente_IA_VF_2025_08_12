@@ -24,9 +24,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Base pública do app (dev: localhost, prod: Vercel)
-const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
-
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -59,21 +56,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   ) => {
     setLoading(true);
 
-    // Supabase exibe "Display name" a partir de full_name
-    const full_name = (metadata?.full_name || metadata?.fullName || '').trim();
-    const whatsapp = (metadata?.whatsapp || '').trim();
+    // normaliza chaves: Supabase mostra "Display name" a partir de full_name
+    const full_name = metadata?.full_name || metadata?.fullName || '';
+    const whatsapp = metadata?.whatsapp || '';
 
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name, whatsapp }, // vai para auth.users.raw_user_meta_data
-        emailRedirectTo: `${APP_URL}/login`, // após confirmar e-mail
+        // Estes campos ficam em auth.users.raw_user_meta_data
+        data: { full_name, whatsapp },
+        emailRedirectTo: `${window.location.origin}/login`,
         autoSignIn: false,
       },
     });
 
-    // Reflete imediatamente no painel (às vezes o meta demora a aparecer)
+    // Reforça a atualização do metadata para refletir de imediato no painel
     if (!error && data.user) {
       await supabase.auth.updateUser({ data: { full_name, whatsapp } });
     }
@@ -107,10 +105,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // ------------------- RESET PASSWORD -------------------
   const requestPasswordReset = async (email: string) => {
     setLoading(true);
-    // Mande o usuário direto para a página de redefinição do seu domínio público
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${APP_URL}/reset-password`,
-    });
+    const redirectTo = `${window.location.origin}`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     setLoading(false);
     return handleError(error as any);
   };

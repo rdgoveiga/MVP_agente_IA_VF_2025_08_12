@@ -1,5 +1,5 @@
 // src/contexts/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { Session, User } from '../types';
 
@@ -9,13 +9,7 @@ interface AuthContextType {
   loading: boolean;
   initialLoading: boolean;
   error: { message: string } | null;
-
-  signUp: (
-    email: string,
-    password: string,
-    metadata?: { full_name?: string; fullName?: string; whatsapp?: string }
-  ) => Promise<{ error: { message: string } | null }>;
-
+  signUp: (email: string, password: string, metadata?: any) => Promise<{ error: { message: string } | null }>;
   login: (email: string, password: string) => Promise<{ error: { message: string } | null }>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ error: { message: string } | null }>;
@@ -24,26 +18,38 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Base pública do app (dev: localhost, prod: Vercel)
-const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin;
-
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode; navigate: (page: string) => void }> = ({ children, navigate }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<{ message: string } | null>(null);
 
+  // flag para sabermos que estamos no fluxo de recuperação
+  const isRecoveryRef = useRef(false);
+
+  // 1) Se a URL já vier com #...type=recovery..., manda direto para a tela
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, s) => {
+    const hash = window.location.hash || '';
+    if (hash.includes('type=recovery')) {
+      isRecoveryRef.current = true;
+      navigate('reset-password');
+    }
+  }, [navigate]);
+
+  // 2) Listener do Supabase: quando ocorrer PASSWORD_RECOVERY, navega para reset
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY' || isRecoveryRef.current) {
+        navigate('reset-password');
+        return;
+      }
       setSession(s as Session);
       setUser(s?.user as User);
       setInitialLoading(false);
     });
     return () => subscription?.unsubscribe();
-  }, []);
+  }, [navigate]);
 
   const handleError = (err: { message: string } | null) => {
     setError(err);
@@ -51,50 +57,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return { error: err };
   };
 
-  // ------------------- SIGN UP -------------------
-  const signUp = async (
-    email: string,
-    password: string,
-    metadata?: { full_name?: string; fullName?: string; whatsapp?: string }
-  ) => {
+  const signUp = async (email: string, password: string, metadata?: any) => {
     setLoading(true);
-
-    // Supabase exibe "Display name" a partir de full_name
-    const full_name = (metadata?.full_name || metadata?.fullName || '').trim();
-    const whatsapp = (metadata?.whatsapp || '').trim();
-
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name, whatsapp }, // vai para auth.users.raw_user_meta_data
-        emailRedirectTo: `${APP_URL}/login`, // após confirmar e-mail
-        autoSignIn: false,
-      },
+        data: { ...(metadata || {}), is_validated: false },
+        emailRedirectTo: `${window.location.origin}/login`,
+      }
     });
-
-    // Reflete imediatamente no painel (às vezes o meta demora a aparecer)
-    if (!error && data.user) {
-      await supabase.auth.updateUser({ data: { full_name, whatsapp } });
-    }
-
     setLoading(false);
     return handleError(error as any);
   };
 
-  // ------------------- LOGIN -------------------
   const login = async (email: string, password: string) => {
     setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) return handleError(error as any);
-
     const isValidated = (data.user as any)?.user_metadata?.is_validated;
-    if (isValidated === false) {
+    if (!isValidated) {
       await supabase.auth.signOut();
       return handleError({ message: 'Conta não validada. Aguarde confirmação.' });
     }
-
     return { error: null };
   };
 
@@ -104,12 +90,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(false);
   };
 
-  // ------------------- RESET PASSWORD -------------------
+  // Envia o e-mail de recuperação; o redirect volta para o app (local ou prod)
   const requestPasswordReset = async (email: string) => {
     setLoading(true);
-    // Mande o usuário direto para a página de redefinição do seu domínio público
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${APP_URL}/reset-password`,
+      redirectTo: window.location.origin
     });
     setLoading(false);
     return handleError(error as any);
@@ -123,20 +108,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        session,
-        user,
-        loading,
-        initialLoading,
-        error,
-        signUp,
-        login,
-        signOut,
-        requestPasswordReset,
-        updateUserPlan,
-      }}
-    >
+    <AuthContext.Provider value={{ session, user, loading, initialLoading, error, signUp, login, signOut, requestPasswordReset, updateUserPlan }}>
       {children}
     </AuthContext.Provider>
   );
