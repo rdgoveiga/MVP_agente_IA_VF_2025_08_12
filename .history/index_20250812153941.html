@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agente de Prospecção IA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-in-up {
+        animation: fadeInUp 0.5s ease-out forwards;
+      }
+      @keyframes skeleton-loading {
+        0% {
+          background-color: hsl(220 13% 25%);
+        }
+        100% {
+          background-color: hsl(220 13% 40%);
+        }
+      }
+      .skeleton-loading {
+        animation: skeleton-loading 1s linear infinite alternate;
+      }
+      /* Apple-like system font stack and background */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        background-color: #111827; /* bg-gray-900 */
+      }
+       .bg-grid-pattern {
+        background-image: linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+        background-size: 2.5rem 2.5rem;
+        background-position: center;
+      }
+      /* Custom Scrollbar for Webkit Browsers */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: rgba(31, 41, 55, 0.5); /* bg-gray-700/50 */
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(75, 85, 99, 0.7); /* bg-gray-500/70 */
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #6b7280; /* bg-gray-500 */
+      }
+    </style>
+  <script>
+    // In a real production environment, these values would be replaced
+    // by a build process (e.g., Vite, Webpack) with actual secrets.
+    // For this environment, we define them on the window.
+    window.process = {
+      env: {
+        // IMPORTANT: These are placeholders for Supabase credentials.
+        // Replace them to connect to your real Supabase backend.
+        // If left as placeholders, the app will use a local simulation.
+        SUPABASE_URL: "INSIRA_SUA_SUPABASE_URL",
+        SUPABASE_ANON_KEY: "INSIRA_SUA_SUPABASE_ANON_KEY",
+        // IMPORTANT: Placeholder for Google Maps API key for Places Autocomplete.
+        // Replace with your actual key to enable the feature.
+        GOOGLE_MAPS_API_KEY: "INSIRA_SUA_GOOGLE_MAPS_API_KEY",
+      }
+    };
+  </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.1/",
+    "react": "https://esm.sh/react@^19.1.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.11.0",
+    "xlsx": "https://esm.sh/xlsx@^0.18.5",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.44.4"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
