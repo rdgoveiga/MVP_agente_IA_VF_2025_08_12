@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import ResetPasswordPage from './src/pages/ResetPasswordPage';
-import { supabase } from './src/lib/supabaseClient';
+import { supabase } from './lib/supabaseClient';
 
 /**
  * Normaliza links do Supabase com dois '#':
